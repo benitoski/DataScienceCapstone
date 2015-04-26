@@ -1,0 +1,597 @@
+---
+title: "Predict Next Word - Data Science Capstone"
+author: "Oscar Benitez"
+date: "April, 2015"
+output: html_document
+---
+
+###Summary
+The goal of this project is to build a model to predict the next word given an user input of a word or a sentence fragment. This final report shows the complete method and examines the main results of appliyng the model.
+
+###Introduction
+The ability of predicting the next word when a user is typing a text on a mobile device is has been assumed for some time, and is a valuable help for everyone.
+Softkey has developed a keyboard with these features and more that is ubiquitous in many mobile device operative systems. This company has become a partner with John Hopkins's Data Science Specialization  providing expertise and guidance to develop our next word model. In this Capstone Proyect I will apply natural language processing (NLP) and text mining using R tools to build a model to predict the next word given a user input.  
+
+This proyect takes an [n-gram model](http://en.wikipedia.org/wiki/N-gram#n-gram_models) approximation to build the application.
+An n-gram model is a type of probabilistic language model for predicting the next item in such a sequence in the form of a (n − 1)–order Markov model  
+
+The data was cleaned and standardized into a Corpus following both Text Mining and Natural Language Processing best practices. The Corpus was processed into a 2-Gram model. 
+The conditional probability of the last word of the pair given the preceding word is used in the model to pick up the most probable next word in the user input text.
+
+###About the data
+The data is originally from [HC Corpora](http://www.corpora.heliohost.org/) and the datasets for this project comes from a collection of written text in different languages (Russian, Finnish, German and English) of news articles, blog posts and tweets. This proyect has been built on the English data set. 
+
+###Data downloading
+The data have been downloaded from [Capston Dataset](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip). 
+
+```{r, datacapture, echo=TRUE, eval=FALSE}
+
+################################################################################
+#1.capture data
+################################################################################
+
+setwd("~/DSC")
+library(tm)
+
+#clean the directory
+setwd("~/DSC/Sample")
+namesR <- list.files(pattern="*.txt") 
+file.remove(namesR) 
+setwd("~/DSC")
+
+##read the blog data
+blogs<-file("./en_US.blogs.txt", open="rb") 
+blogData<-readLines(blogs, encoding="latin1")
+close(blogs) 
+
+##read the news data
+news<-file("./en_US.news.txt", open="rb") 
+newsData<-readLines(news, encoding="latin1")
+close(news) 
+
+##reed the tweets data
+twits<-file("./en_US.twitter.txt", open="rb") 
+twitsData<-readLines(twits, encoding="latin1")
+close(twits) 
+
+```
+###Data cleaning
+In the Natural Language Processing field is necessary to clean and to standardize the data as much as possible in order the different algorithms can perform any analysis.   
+The most common cleaning tasks are: 
+
+* decide the set(s) of characters to use for the text standardization, 
+* convert all the characters in the data to lower/upper case, 
+* replace/delete words, characters, etc. of interest, 
+* stemming the data (process for reducing inflected -or sometimes derived- words to their word stem, base or root form), 
+* etc.
+
+In this project two major replacement task were performed: expand the English contractions and delete the profane words.  
+
+I decided not to stream the data because if the words are reduced to its roots no inflection will be ever predicted.
+
+After several tests I found more efficient and flexible to perform the data cleansing *before* incorporating them in the Corpus.  
+
+The following code chunk shows the function used to clean the data:  
+1. Remove non ASCII characters  
+2. transform all the characters into the lower case  
+3. expand the english contractions for easy manipulation  
+4. replace double spaces with single space  
+
+```{r, datacleaning ,echo=TRUE, eval=FALSE}
+################################################################################
+#2.clean data
+################################################################################
+library(stringr)
+
+#clean the text and expand contractions
+cleanText <- function(x){
+  x<-iconv(x, "latin1", "ASCII", sub=" ")
+  x<-tolower(x)
+  x<-str_replace_all(x, "[^[:alpha:]]", " ")
+  x<-str_replace_all(x, "  ", " ")
+  x<-str_replace_all(x,"ain t ","am not ")
+  x<-str_replace_all(x,"aren t ","are not ")
+  x<-str_replace_all(x,"can t ","cannot ")
+  x<-str_replace_all(x,"could ve ","could have ")
+  x<-str_replace_all(x,"couldn t ","could not ")
+  x<-str_replace_all(x,"couldn t ve ","could not have ")
+  x<-str_replace_all(x,"didn t ","did not ")
+  x<-str_replace_all(x,"doesn t ","does not ")
+  x<-str_replace_all(x,"don t ","do not ")
+  x<-str_replace_all(x,"hadn t ","had not ")
+  x<-str_replace_all(x,"hadn t ve ","had not have ")
+  x<-str_replace_all(x,"hasn t ","has not ")
+  x<-str_replace_all(x,"haven t ","have not ")
+  x<-str_replace_all(x,"he d ","he had ")
+  x<-str_replace_all(x,"he d ve ","he would have ")
+  x<-str_replace_all(x,"he ll ","he will ")
+  x<-str_replace_all(x,"he s ","he is ")
+  x<-str_replace_all(x,"how d ","how did ")
+  x<-str_replace_all(x,"how ll ","how will ")
+  x<-str_replace_all(x,"how s ","how has ")
+  x<-str_replace_all(x,"i d ","i had ")
+  x<-str_replace_all(x,"i d ve ","i would have ")
+  x<-str_replace_all(x,"i ll ","i will ")
+  x<-str_replace_all(x,"i m ","i am ")
+  x<-str_replace_all(x,"i ve ","i have ")
+  x<-str_replace_all(x,"isn t ","is not ")
+  x<-str_replace_all(x,"it d ","it had ")
+  x<-str_replace_all(x,"it d ve ","it would have ")
+  x<-str_replace_all(x,"it ll ","it will ")
+  x<-str_replace_all(x,"it s ","it is ")
+  x<-str_replace_all(x,"let s ","let us ")
+  x<-str_replace_all(x,"ma am ","madam ")
+  x<-str_replace_all(x,"mightn t ","might not ")
+  x<-str_replace_all(x,"mightn t ve ","might not have ")
+  x<-str_replace_all(x,"might ve ","might have ")
+  x<-str_replace_all(x,"mustn t ","must not ")
+  x<-str_replace_all(x,"must ve ","must have ")
+  x<-str_replace_all(x,"needn t ","need not ")
+  x<-str_replace_all(x,"not ve ","not have ")
+  x<-str_replace_all(x,"o clock ","of the clock ")
+  x<-str_replace_all(x,"oughtn t ","ought not ")
+  x<-str_replace_all(x,"ow s at ","how is that ")
+  x<-str_replace_all(x,"shan t ","shall not ")
+  x<-str_replace_all(x,"she d ","she had ")
+  x<-str_replace_all(x,"she d ve ","she would have ")
+  x<-str_replace_all(x,"she ll ","she will ")
+  x<-str_replace_all(x,"she s ","she is ")
+  x<-str_replace_all(x,"should ve ","should have ")
+  x<-str_replace_all(x,"shouldn t ","should not ")
+  x<-str_replace_all(x,"shouldn t ve ","should not have ")
+  x<-str_replace_all(x,"that ll ","that will ")
+  x<-str_replace_all(x,"that s ","that is ")
+  x<-str_replace_all(x,"there d ","there had ")
+  x<-str_replace_all(x,"there d ve ","there would have ")
+  x<-str_replace_all(x,"there re ","there are ")
+  x<-str_replace_all(x,"there s ","there is ")
+  x<-str_replace_all(x,"they d ","they had ")
+  x<-str_replace_all(x,"they d ve ","they would have ")
+  x<-str_replace_all(x,"they ll ","they will ")
+  x<-str_replace_all(x,"they re ","they are ")
+  x<-str_replace_all(x,"they ve ","they have ")
+  x<-str_replace_all(x,"wasn t ","was not ")
+  x<-str_replace_all(x,"we d ","we had ")
+  x<-str_replace_all(x,"we d ve ","we would have ")
+  x<-str_replace_all(x,"we ll ","we will ")
+  x<-str_replace_all(x,"we re ","we are ")
+  x<-str_replace_all(x,"we ve ","we have ")
+  x<-str_replace_all(x,"weren t ","were not ")
+  x<-str_replace_all(x,"what ll ","what will ")
+  x<-str_replace_all(x,"what re ","what are ")
+  x<-str_replace_all(x,"what s ","what is ")
+  x<-str_replace_all(x,"what ve ","what have ")
+  x<-str_replace_all(x,"when s ","when is ")
+  x<-str_replace_all(x,"where d ","where did ")
+  x<-str_replace_all(x,"where s ","where is ")
+  x<-str_replace_all(x,"where ve ","where have ")
+  x<-str_replace_all(x,"who d ","who had ")
+  x<-str_replace_all(x,"who d ve ","who would have ")
+  x<-str_replace_all(x,"who ll ","who will ")
+  x<-str_replace_all(x,"who re ","who are ")
+  x<-str_replace_all(x,"who s ","who is ")
+  x<-str_replace_all(x,"who ve ","who have ")
+  x<-str_replace_all(x,"why ll ","why will ")
+  x<-str_replace_all(x,"why re ","why are ")
+  x<-str_replace_all(x,"why s ","why is ")
+  x<-str_replace_all(x,"won t ","will not ")
+  x<-str_replace_all(x,"would ve ","would have ")
+  x<-str_replace_all(x,"wouldn t ","would not ")
+  x<-str_replace_all(x,"wouldn t ve ","would not have ")
+  x<-str_replace_all(x,"y all ","you all ")
+  x<-str_replace_all(x,"y all d ve ","you all should have ")
+  x<-str_replace_all(x,"you d ","you had ")
+  x<-str_replace_all(x,"you d ve ","you would have ")
+  x<-str_replace_all(x,"you ll ","you will ")
+  x<-str_replace_all(x,"you re ","you are ")
+  x<-str_replace_all(x,"you ve ","you have ")
+  x<-gsub("^ *|(?<= ) | *$", "", x, perl=T)
+  return(x)
+}
+
+blogData2<-cleanText(blogData)
+newsData2<-cleanText(newsData)
+twitsData2<-cleanText(twitsData)
+
+```
+###Data samplng
+
+Each file was split into 50 sample files to facilitate subsequent handling.
+
+```{r, datasampling, echo=TRUE, eval=FALSE}
+################################################################################
+#3. Data sampling
+################################################################################
+
+#divide el archivo en ntiles
+
+nLines.blog<-NROW(blogData);nLines.news<-NROW(newsData);nLines.twits<-NROW(twitsData)
+
+ntil.1<-round(nLines.blog/50);ntil.2<-round(nLines.news/50);ntil.3<-round(nLines.twits/50)
+
+qBlog<-split(blogData2, ceiling(seq_along(blogData2)/ntil.1))
+qNews<-split(newsData2, ceiling(seq_along(newsData2)/ntil.2))
+qTwits<-split(twitsData2, ceiling(seq_along(twitsData2)/ntil.3))
+
+for(n in names(qBlog))
+  write.table(qBlog[[n]],
+              file = paste("./Sample/qBlog",n, ".txt"))
+
+for(n in names(qNews))
+  write.table(qNews[[n]],
+              file = paste("./Sample/qNews",n, ".txt"))
+
+for(n in names(qTwits))
+  write.table(qTwits[[n]],
+              file = paste("./Sample/qTwits",n, ".txt"))
+
+rm(list=ls())
+gc()
+```
+###Create Corpus
+
+"In linguistics, a *corpus* or text corpus is a large and structured set of texts.... They are used to do statistical analysis and hypothesis testing, checking occurrences or validating linguistic rules within a specific language territory." [Wiki: Corpus](http://en.wikipedia.org/wiki/Text_corpus)
+
+All the sample files where incorporate into individual corpus.  
+Several steps where necessary to remove profane words. Two sources were combined to obtain an extensive collection of words to exclude from the analysis: [List of Dirty Naughty Obscene and Otherwise Bad Words](https://raw.githubusercontent.com/shutterstock/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en) and [bad words](http://www.cs.cmu.edu/~biglou/resources/bad-words.txt)
+
+```{r, echo=TRUE, eval=FALSE}
+################################################################################
+#4. load the sample files and remove profane words
+################################################################################
+
+prof1 <- file("./Profanity_en_01.txt", "r") 
+prof2 <- file("./Profanity_en_02.txt", "r") 
+Prof01<-readLines(prof1)
+Prof02<-readLines(prof2)
+Prof03<-c(Prof01,Prof02)
+Prof03<-sort(Prof03, decreasing = FALSE, na.last = NA)
+profanity<-unique(Prof03)
+profanity_vector <- VectorSource(profanity)
+close(prof1);close(prof2)
+rm(Prof01);rm(Prof02);rm(Prof03)
+
+clean<-function(x){tm_map(x, removeWords, profanity_vector);tm_map(x, stripWhitespace)}
+
+options(stringsAsFactors = FALSE)
+
+#rename the sample files
+names <- list.files("./Sample",pattern="*.txt") 
+new_names <- paste(substring(names,1,2),formatC(seq(length(names)), 
+                                                width=3, flag="0"),".txt", sep="") 
+setwd("~/DSC/Sample")
+file.rename(from=names, to=new_names) 
+setwd("~/DSC")
+
+#build file name list
+Snames <-substr(new_names,1,5)
+
+#load files as cleaned corpus
+for(i in Snames){
+  filepath <- paste("./Sample/", i,".txt", sep="")
+  assign(i, clean(Corpus(VectorSource(read.table(filepath,encoding="latin1")))))
+}
+gc()
+```
+### Term Document Matrix  
+"Term-document matrix is a mathematical matrix that describes the frequency of terms that occur in a collection of documents" [Wiki: Document Term Matrix](http://en.wikipedia.org/wiki/Document-term_matrix)  
+Term-document matrix is frequently used in NLP to find the most frequent words for example or as an intermediate step to building a statistic model as in this project.  
+This is the point where is necesary to choose how many n-grams the model will use.  
+Keeping in mind that the final objective was to build a model as compact as possible to predict the most probable next word several n-grams were tested.  
+The result was that the time to process and size of the resulting matrix increases exponentially as n-grams grows making very difficult to maintain both speed and portability.  
+After several trials the final number of n-gram chosen was two. Only 15 sample files of each data source (30%) were included in the building process. The remaining files were separated to evaluate the model.  
+
+```{r, tdm, echo=TRUE, eval=FALSE}
+################################################################################
+#5.Term Document Matrix 
+################################################################################
+
+library(rJava) 
+.jinit(parameters="-Xmx128g")
+library(RWeka)
+
+#N-Gram function
+nGram2Tok  <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+
+#Split the corpus into six corpora to preserve processing resources
+bNames<-split(Snames, ceiling(seq_along(Snames)/25))
+corpus1<-mget(bNames[[1]]);corpus2<-mget(bNames[[2]])
+corpus3<-mget(bNames[[3]]);corpus4<-mget(bNames[[4]])
+corpus5<-mget(bNames[[5]]);corpus6<-mget(bNames[[6]])
+
+#TDM
+tdm.1 <- lapply(corpus1, TermDocumentMatrix, control=list(tokenize=nGram2Tok))
+tdm.2 <- lapply(corpus2, TermDocumentMatrix, control=list(tokenize=nGram2Tok))
+tdm.3 <- lapply(corpus3, TermDocumentMatrix, control=list(tokenize=nGram2Tok))
+tdm.4 <- lapply(corpus4, TermDocumentMatrix, control=list(tokenize=nGram2Tok))
+tdm.5 <- lapply(corpus5, TermDocumentMatrix, control=list(tokenize=nGram2Tok))
+tdm.6 <- lapply(corpus6, TermDocumentMatrix, control=list(tokenize=nGram2Tok))
+
+#merge all the TDM corpora into a single one
+tdm1<-c(tdm.2[[1]],tdm.2[[2]],tdm.2[[3]],tdm.2[[4]],tdm.2[[5]],
+        tdm.2[[6]],tdm.2[[7]],tdm.2[[8]],tdm.2[[9]],tdm.2[[10]],
+        tdm.2[[11]],tdm.2[[12]],tdm.2[[13]],tdm.2[[14]],tdm.2[[15]])
+tdm2<-c(tdm.2[[1]],tdm.2[[2]],tdm.2[[3]],tdm.2[[4]],tdm.2[[5]],
+        tdm.2[[6]],tdm.2[[7]],tdm.2[[8]],tdm.2[[9]],tdm.2[[10]],
+        tdm.2[[11]],tdm.2[[12]],tdm.2[[13]],tdm.2[[14]],tdm.2[[15]])
+tdm3<-c(tdm.3[[1]],tdm.3[[2]],tdm.3[[3]],tdm.3[[4]],tdm.3[[5]],
+        tdm.3[[6]],tdm.3[[7]],tdm.3[[8]],tdm.3[[9]],tdm.3[[10]],
+        tdm.3[[11]],tdm.3[[12]],tdm.3[[13]],tdm.3[[14]],tdm.3[[15]])
+tdm4<-c(tdm.4[[1]],tdm.4[[2]],tdm.4[[3]],tdm.4[[4]],tdm.4[[5]],
+        tdm.4[[6]],tdm.4[[7]],tdm.4[[8]],tdm.4[[9]],tdm.4[[10]],
+        tdm.4[[11]],tdm.4[[12]],tdm.4[[13]],tdm.4[[14]],tdm.4[[15]])
+tdm5<-c(tdm.5[[1]],tdm.5[[2]],tdm.5[[3]],tdm.5[[4]],tdm.5[[5]],
+        tdm.5[[6]],tdm.5[[7]],tdm.5[[8]],tdm.5[[9]],tdm.5[[10]],
+        tdm.5[[11]],tdm.5[[12]],tdm.5[[13]],tdm.5[[14]],tdm.5[[15]])
+tdm6<-c(tdm.6[[1]],tdm.6[[2]],tdm.6[[3]],tdm.6[[4]],tdm.6[[5]],
+        tdm.6[[6]],tdm.6[[7]],tdm.6[[8]],tdm.6[[9]],tdm.6[[10]],
+        tdm.6[[11]],tdm.6[[12]],tdm.6[[13]],tdm.6[[14]],tdm.6[[15]])
+tdm7<-c(tdm1,tdm2,tdm3,tdm4,tdm5,tdm6)
+
+#remove sparse terms
+tdmc.n2<-removeSparseTerms(tdm7, 0.1)
+
+rm(list=ls(pattern="q"))
+rm(corpus1);rm(corpus2);rm(corpus3);rm(corpus4);rm(corpus5);rm(corpus6)
+rm(tdm.n2);rm(tdm2);rm(tdm1);rm(tdm2);rm(tdm3);rm(tdm4);rm(tdm5);rm(tdm6);rm(tdm7);
+rm(bNames);rm(tdm.1);rm(tdm.2);rm(tdm.3);rm(tdm.4);rm(tdm.5);rm(tdm.6);
+rm(filepath);rm(i);rm(names);rm(new_names);
+rm(prof1);rm(prof2);rm(profanity);rm(profanity_vector);
+rm(clean);rm(nGram2Tok)
+
+save.image("~/DSC/StatusMarkovChain.RData")
+
+rm(list=ls())
+gc()
+```
+###Build the model
+The model use the conditional probability of the last word of the n-gram pair given the preceding word as the input to pick up the most probable next word.  
+
+```{r, model, echo=TRUE, eval=FALSE}
+################################################################################
+#6.conditional probability
+################################################################################
+
+#Ambiente
+load("~/DSC/StatusMarkovChain.RData")
+
+#row sum of the last word of the pair
+cSum2 <- apply(tdmc.n2, 1, sum)
+
+#Terms
+terms2 <- Terms(tdmc.n2)
+
+library(stringr)
+#Get the last word of the n-gram: Consecuent
+last2<-word(terms2,-1)
+
+#Get the next-to-last word of the n-gram: Antecedent
+first2<-word(terms2,1)
+
+#buid the intermediate data frame
+t2<-as.data.frame(terms2)
+colnames(t2) <- ("Term")
+t2$antecedent<-first2
+t2$consecuent<-last2
+t2$cSum<-(cSum2)
+
+#final clean up of the data frame
+t2<-subset(t2,(t2$antecedent=="a" & nchar(t2$antecedent)==1) | nchar(t2$antecedent)>1)
+t2<-subset(t2,(t2$consecuent=="a" & nchar(t2$consecuent)==1) | nchar(t2$consecuent)>1)
+
+#row sum of the first word of the pair
+aSum<-aggregate(cSum ~ antecedent, data = t2, FUN = sum)
+colnames(aSum) <- c("antecedent","aSum")
+t3 <- merge(t2,aSum,by="antecedent",all.x=TRUE)
+
+#Probability
+t3$prob<-(t3$cSum/t3$aSum)
+
+#Final data frame
+df<-t3[,c("antecedent","consecuent","prob")]
+
+rm(aSum);rm(t2);rm(t3);rm(cSum2);rm(first2);rm(last2);rm(tdmc.n2);rm(terms2)
+
+save.image("~/DSC/DSC_Model.RData")
+
+rm(list=ls())
+```
+### Back up model
+
+In case the algorithm cannot find a suitable next word for a given input, a second algorithm generates the most probable next word using the same procedure on a bigger 2-Gram corpus based on  [Davies, Mark. (2011) N-grams data from the Corpus of Contemporary American English (COCA)](http://www.ngrams.info)
+```{r, backupmodel, echo=TRUE, eval=FALSE}
+################################################################################
+#7.Backup model
+################################################################################
+
+word.bag<-read.delim("w2_.txt", header=FALSE)
+colnames(word.bag) <- c("cSum","antecedent","consecuent")
+aSum<-aggregate(cSum ~ antecedent, data = word.bag, FUN = sum)
+colnames(aSum) <- c("antecedent","aSum")
+t3 <- merge(word.bag,aSum,by="antecedent",all.x=TRUE)
+t3$prob<-(t3$cSum/t3$aSum)
+t3<-subset(t3,(t3$antecedent=="a" & nchar(t3$antecedent)==1) | nchar(t3$antecedent)>1)
+t3<-subset(t3,(t3$consecuent=="a" & nchar(t3$consecuent)==1) | nchar(t3$consecuent)>1)
+df2<-t3[,c("antecedent","consecuent","prob")]
+rm(aSum);rm(t3);rm(word.bag)
+save.image("~/DSC/DSC_Model_bkup.RData")
+rm(list=ls())
+```
+###Model Evaluation
+The model was evaluated using the sample files left in the building step. For the fist word of each 2-gram, the next probable word was retrieved and compared with the actual word.
+Two predictions were obtained: one from the main model and the second from the backup model wich was made from a larger n-gram file. The las paragraph in the following chunk shows the performance of each prediction. 
+There was a 15% of acurracy with the model based on the provided data and a 17% of acurracy  with the model based on the large 2-gram file.  
+
+```{r, modeleval, echo=TRUE, eval=FALSE}
+setwd("~/DSC")
+library(tm)
+library(rJava) # .jinit(parameters="-Xmx2g")
+.jinit(parameters="-Xmx128g")
+library(RWeka)
+library(stringr)
+options(stringsAsFactors = FALSE)
+load("~/DSC/DSC_Model.RData")
+load("~/DSC/DSC_Model_bkup.RData")
+
+cleanText <- function(x){
+  x<-iconv(x, "latin1", "ASCII", sub=" ")
+  x<-tolower(x)
+  x<-str_replace_all(x, "[^[:alpha:]]", " ")
+  x<-str_replace_all(x, "  ", " ")
+  x<-str_replace_all(x,"ain t ","am not ")
+  x<-str_replace_all(x,"aren t ","are not ")
+  x<-str_replace_all(x,"can t ","cannot ")
+  x<-str_replace_all(x,"could ve ","could have ")
+  x<-str_replace_all(x,"couldn t ","could not ")
+  x<-str_replace_all(x,"couldn t ve ","could not have ")
+  x<-str_replace_all(x,"didn t ","did not ")
+  x<-str_replace_all(x,"doesn t ","does not ")
+  x<-str_replace_all(x,"don t ","do not ")
+  x<-str_replace_all(x,"hadn t ","had not ")
+  x<-str_replace_all(x,"hadn t ve ","had not have ")
+  x<-str_replace_all(x,"hasn t ","has not ")
+  x<-str_replace_all(x,"haven t ","have not ")
+  x<-str_replace_all(x,"he d ","he had ")
+  x<-str_replace_all(x,"he d ve ","he would have ")
+  x<-str_replace_all(x,"he ll ","he will ")
+  x<-str_replace_all(x,"he s ","he is ")
+  x<-str_replace_all(x,"how d ","how did ")
+  x<-str_replace_all(x,"how ll ","how will ")
+  x<-str_replace_all(x,"how s ","how has ")
+  x<-str_replace_all(x,"i d ","i had ")
+  x<-str_replace_all(x,"i d ve ","i would have ")
+  x<-str_replace_all(x,"i ll ","i will ")
+  x<-str_replace_all(x,"i m ","i am ")
+  x<-str_replace_all(x,"i ve ","i have ")
+  x<-str_replace_all(x,"isn t ","is not ")
+  x<-str_replace_all(x,"it d ","it had ")
+  x<-str_replace_all(x,"it d ve ","it would have ")
+  x<-str_replace_all(x,"it ll ","it will ")
+  x<-str_replace_all(x,"it s ","it is ")
+  x<-str_replace_all(x,"let s ","let us ")
+  x<-str_replace_all(x,"ma am ","madam ")
+  x<-str_replace_all(x,"mightn t ","might not ")
+  x<-str_replace_all(x,"mightn t ve ","might not have ")
+  x<-str_replace_all(x,"might ve ","might have ")
+  x<-str_replace_all(x,"mustn t ","must not ")
+  x<-str_replace_all(x,"must ve ","must have ")
+  x<-str_replace_all(x,"needn t ","need not ")
+  x<-str_replace_all(x,"not ve ","not have ")
+  x<-str_replace_all(x,"o clock ","of the clock ")
+  x<-str_replace_all(x,"oughtn t ","ought not ")
+  x<-str_replace_all(x,"ow s at ","how is that ")
+  x<-str_replace_all(x,"shan t ","shall not ")
+  x<-str_replace_all(x,"she d ","she had ")
+  x<-str_replace_all(x,"she d ve ","she would have ")
+  x<-str_replace_all(x,"she ll ","she will ")
+  x<-str_replace_all(x,"she s ","she is ")
+  x<-str_replace_all(x,"should ve ","should have ")
+  x<-str_replace_all(x,"shouldn t ","should not ")
+  x<-str_replace_all(x,"shouldn t ve ","should not have ")
+  x<-str_replace_all(x,"that ll ","that will ")
+  x<-str_replace_all(x,"that s ","that is ")
+  x<-str_replace_all(x,"there d ","there had ")
+  x<-str_replace_all(x,"there d ve ","there would have ")
+  x<-str_replace_all(x,"there re ","there are ")
+  x<-str_replace_all(x,"there s ","there is ")
+  x<-str_replace_all(x,"they d ","they had ")
+  x<-str_replace_all(x,"they d ve ","they would have ")
+  x<-str_replace_all(x,"they ll ","they will ")
+  x<-str_replace_all(x,"they re ","they are ")
+  x<-str_replace_all(x,"they ve ","they have ")
+  x<-str_replace_all(x,"wasn t ","was not ")
+  x<-str_replace_all(x,"we d ","we had ")
+  x<-str_replace_all(x,"we d ve ","we would have ")
+  x<-str_replace_all(x,"we ll ","we will ")
+  x<-str_replace_all(x,"we re ","we are ")
+  x<-str_replace_all(x,"we ve ","we have ")
+  x<-str_replace_all(x,"weren t ","were not ")
+  x<-str_replace_all(x,"what ll ","what will ")
+  x<-str_replace_all(x,"what re ","what are ")
+  x<-str_replace_all(x,"what s ","what is ")
+  x<-str_replace_all(x,"what ve ","what have ")
+  x<-str_replace_all(x,"when s ","when is ")
+  x<-str_replace_all(x,"where d ","where did ")
+  x<-str_replace_all(x,"where s ","where is ")
+  x<-str_replace_all(x,"where ve ","where have ")
+  x<-str_replace_all(x,"who d ","who had ")
+  x<-str_replace_all(x,"who d ve ","who would have ")
+  x<-str_replace_all(x,"who ll ","who will ")
+  x<-str_replace_all(x,"who re ","who are ")
+  x<-str_replace_all(x,"who s ","who is ")
+  x<-str_replace_all(x,"who ve ","who have ")
+  x<-str_replace_all(x,"why ll ","why will ")
+  x<-str_replace_all(x,"why re ","why are ")
+  x<-str_replace_all(x,"why s ","why is ")
+  x<-str_replace_all(x,"won t ","will not ")
+  x<-str_replace_all(x,"would ve ","would have ")
+  x<-str_replace_all(x,"wouldn t ","would not ")
+  x<-str_replace_all(x,"wouldn t ve ","would not have ")
+  x<-str_replace_all(x,"y all ","you all ")
+  x<-str_replace_all(x,"y all d ve ","you all should have ")
+  x<-str_replace_all(x,"you d ","you had ")
+  x<-str_replace_all(x,"you d ve ","you would have ")
+  x<-str_replace_all(x,"you ll ","you will ")
+  x<-str_replace_all(x,"you re ","you are ")
+  x<-str_replace_all(x,"you ve ","you have ")
+  x<-gsub("^ *|(?<= ) | *$", "", x, perl=T)
+  return(x)
+}
+
+profanity_vector <- VectorSource(read.csv("profanity.csv"))
+clean<-function(x){tm_map(x, removeWords, profanity_vector);tm_map(x, stripWhitespace)}
+nGram2Tok  <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+lastW<-function(x){y<-word(x,-1) 
+                   return(y)}
+nLastW<-function(x){nw<-sapply(gregexpr("\\W+", x), length) + 1; y<-word(x,nw-1,nw-1)
+                  return(y)}
+pred1<-function(x){result.1<-subset(df, antecedent == x)
+                   result.2<-result.1[order(-result.1$prob),]
+                   y<-result.2[1,"consecuent"]
+                   return(y)}
+pred2<-function(x){result.1<-subset(df2, antecedent == x)
+                   result.2<-result.1[order(-result.1$prob),]
+                   y<-result.2[1,"consecuent"]
+                   return(y)}
+
+pathText<-c("./Sample/qNews 27 .txt")
+data0<-read.table(pathText,encoding="latin1")
+cText<- cleanText(data0)
+corpus<-clean(Corpus(VectorSource(cText)))
+#corpus<-clean(Corpus(VectorSource(data0)))
+tdm <- TermDocumentMatrix(corpus, control=list(tokenize=nGram2Tok))
+tdmc<-removeSparseTerms(tdm, 0.1)
+dataf <- as.data.frame(Terms(tdmc))
+colnames(dataf) <- ("Term")
+dataf$antecedent<-word(Terms(tdmc),1)
+dataf$consecuent<-word(Terms(tdmc),-1)
+dataf$cSum2 <- apply(tdmc, 1, sum)
+dataf<-subset(dataf,(dataf$antecedent=="a" & nchar(dataf$antecedent)==1) | 
+                nchar(dataf$antecedent)>1)
+dataf<-subset(dataf,(dataf$consecuent=="a" & nchar(dataf$consecuent)==1) | 
+                nchar(dataf$consecuent)>1)
+dataf<-subset(dataf,dataf$cSum>10)
+p1 <- sapply(1:nrow(dataf), function(i) pred1(dataf[i,2]))
+p2 <- sapply(1:nrow(dataf), function(i) pred2(dataf[i,2]))
+
+dataf$pred1<-p1
+dataf$pred2<-p2
+
+dataf$eval1<-ifelse(dataf$consecuent==dataf$pred1,1,0)
+dataf$eval2<-ifelse(dataf$consecuent==dataf$pred2,1,0)
+
+rm(data0)
+rm(df);rm(df2);rm(p1);rm(p2);rm(pathText);rm(profanity_vector);rm(tdmc);rm(clean)
+rm(cleanText);rm(data);rm(lastW);rm(nGram2Tok);rm(nLastW);rm(pred1);rm(pred2)
+rm(corpus);rm(tdm)
+
+save.image("~/DSC/EvalSample.RData")
+
+c(mean(dataf$eval1, na.rm=TRUE),mean(dataf$eval2, na.rm=TRUE))
+#[1] 0.1571322 0.1751382
+```
+### Conclusions and next steps
+This model is a naive approximation to the next probable word problem but at the same time it is pretty efficient to compute the next probable word. Perhaps a mix of models like predict next character, predict grammar, identify personal names could help to improve this kind of applications.  
+
+..."n-gram models are often criticized because they lack any explicit representation of long range dependency. (In fact, it was Chomsky's critique of Markov models in the late 1950s that caused their virtual disappearance from natural language processing, along with statistical methods in general, until well into the 1980s.) This is because the only explicit dependency range is (n − 1) tokens for an n-gram model, and since natural languages incorporate many cases of unbounded dependencies (such as wh-movement), this means that an n-gram model cannot in principle distinguish unbounded dependencies from noise (since long range correlations drop exponentially with distance for any Markov model)." [Wiki: n-gram model](http://en.wikipedia.org/wiki/N-gram#n-gram_models)  
+
